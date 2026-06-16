@@ -23,7 +23,7 @@
 --  - Revision 0.01: Initial version created for Reaction Timer project.
 -- 
 -- Additional Comments:
---  - Compatible with ALU and seven-segment display decoding modules.
+--  - Compatible with reaction_stats and seven-segment display decoding modules.
 --  - Counter is synchronous with system clock.
 ----------------------------------------------------------------------------------
 
