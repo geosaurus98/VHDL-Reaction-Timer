@@ -4,38 +4,29 @@
 --           - Matthew Claridge
 --           - Joel Dunwoodie
 --           - George Johnson
---
--- Design Name: Arithmetic Logic Unit (ALU)
+-- 
+-- Create Date: 
+-- Design Name: Arithmetic Logic Unit (ALU) for Reaction Timer
 -- Module Name: ALU - Behavioral Architecture
 -- Project Name: ENEL373 Reaction Timer Project
 -- Target Devices: Digilent Nexys-4 DDR FPGA Board (Artix-7 XC7A100T-1CSG324C)
 -- Tool Versions: AMD Vivado 2022.2
---
+-- 
 -- Description:
--- Purely combinational 32-bit ALU. Selects an arithmetic or logic operation on
--- two generic operands A and B based on a 3-bit opcode. Produces a 32-bit result
--- and four status flags: Zero, Carry, Overflow, Negative.
---
--- Opcode table:
---   000  ADD  : result = A + B
---   001  SUB  : result = A - B
---   010  AND  : result = A AND B
---   011  OR   : result = A OR B
---   100  XOR  : result = A XOR B
---   101  NOT  : result = NOT A
---   110  SLT  : result = 1 if A < B (signed), else 0
---   111  PASS : result = A
---
--- Flags:
---   zero     : high when result = 0
---   carry    : unsigned carry-out (ADD) or borrow (SUB, high when A < B unsigned)
---   overflow : signed two's-complement overflow (ADD and SUB only)
---   negative : MSB of result (sign bit)
---
--- Dependencies: None.
---
+-- This module implements a 32-bit Arithmetic Logic Unit (ALU) for a Reaction Timer system.
+-- It supports operations to pass the current count, find minimum, find maximum, or compute 
+-- the average of stored reaction times.
+-- The ALU output is automatically converted to Binary Coded Decimal (BCD) format.
+-- 
+-- Dependencies: 
+-- - DoubleDabbler32Bit.vhd (Binary to BCD converter module).
+-- 
 -- Revision History:
---  - Revision 0.01: Initial version -- proper ALU replacing prior stats-calculator stub.
+--  - Revision 0.01: Initial version created to support core and extension specifications.
+-- 
+-- Additional Comments:
+--  - Designed to integrate with reaction time storage and display modules.
+--  - Output values are ready for direct 7-segment display decoding.
 ----------------------------------------------------------------------------------
 
 library IEEE;
@@ -43,84 +34,126 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
 entity ALU is
-    Port (
-        A        : in  STD_LOGIC_VECTOR(31 downto 0);
-        B        : in  STD_LOGIC_VECTOR(31 downto 0);
-        opcode   : in  STD_LOGIC_VECTOR(2 downto 0);
-        result   : out STD_LOGIC_VECTOR(31 downto 0);
-        zero     : out STD_LOGIC;
-        carry    : out STD_LOGIC;
-        overflow : out STD_LOGIC;
-        negative : out STD_LOGIC
-    );
+  Port (
+    operation : in STD_LOGIC_VECTOR(1 downto 0);           -- ALU operation: 00 = pass count, 01 = min, 10 = max, 11 = avg
+    clk       : in STD_LOGIC;                              -- System clock (e.g., clk_ms)
+    A, B, C, count : in STD_LOGIC_VECTOR(31 downto 0);     -- Inputs
+    result    : out STD_LOGIC_VECTOR(31 downto 0)          -- Final BCD result
+  );
 end ALU;
 
 architecture Behavioral of ALU is
 
-    signal result_sig : STD_LOGIC_VECTOR(31 downto 0);
-    signal carry_sig  : STD_LOGIC;
-    signal ovflow_sig : STD_LOGIC;
+  -- Binary to BCD conversion control
+  signal start_bcd     : STD_LOGIC := '0';              -- Start signal for converter
+  signal done_bcd      : STD_LOGIC;                     -- High when conversion is done
+  signal bcd_output    : STD_LOGIC_VECTOR(31 downto 0); -- Final converted BCD output
+  signal result_ready  : STD_LOGIC := '0';              -- Flag to control when to send to converter
+  signal binary_buffer : STD_LOGIC_VECTOR(31 downto 0); -- Binary input to converter
 
-begin
+  -- Internal unsigned values
+  signal A_unsigned      : unsigned(31 downto 0);
+  signal B_unsigned      : unsigned(31 downto 0);
+  signal C_unsigned      : unsigned(31 downto 0);
+  signal count_unsigned  : unsigned(31 downto 0);
+  signal result_unsigned : unsigned(31 downto 0); -- ALU result before conversion
 
-    process(A, B, opcode)
-        variable add_r : unsigned(32 downto 0);
-        variable sub_r : unsigned(32 downto 0);
-        variable res   : STD_LOGIC_VECTOR(31 downto 0);
-        variable c     : STD_LOGIC;
-        variable ov    : STD_LOGIC;
+  -- Component declaration
+  component DoubleDabbler32Bit is
+    Port (
+      clk     : in  STD_LOGIC;
+      reset   : in  STD_LOGIC;
+      start   : in  STD_LOGIC;
+      BIN     : in  STD_LOGIC_VECTOR(31 downto 0);
+      BCD     : out STD_LOGIC_VECTOR(31 downto 0);
+      done    : out STD_LOGIC
+    );
+  end component;
+
     begin
-        add_r := ('0' & unsigned(A)) + ('0' & unsigned(B));
-        sub_r := ('0' & unsigned(A)) - ('0' & unsigned(B));
-        res   := (others => '0');
-        c     := '0';
-        ov    := '0';
-
-        case opcode is
-            when "000" =>  -- ADD
-                res := std_logic_vector(add_r(31 downto 0));
-                c   := add_r(32);
-                ov  := ((not A(31)) and (not B(31)) and add_r(31)) or
-                        (A(31) and B(31) and (not add_r(31)));
-
-            when "001" =>  -- SUB (A - B)
-                res := std_logic_vector(sub_r(31 downto 0));
-                c   := sub_r(32);  -- borrow: '1' when A < B (unsigned)
-                ov  := ((not A(31)) and B(31) and sub_r(31)) or
-                        (A(31) and (not B(31)) and (not sub_r(31)));
-
-            when "010" =>  -- AND
-                res := A and B;
-
-            when "011" =>  -- OR
-                res := A or B;
-
-            when "100" =>  -- XOR
-                res := A xor B;
-
-            when "101" =>  -- NOT A
-                res := not A;
-
-            when "110" =>  -- SLT: result = 1 if A < B (signed comparison)
-                if signed(A) < signed(B) then
-                    res := (0 => '1', others => '0');
-                else
-                    res := (others => '0');
-                end if;
-
-            when others =>  -- PASS: result = A
-                res := A;
-        end case;
-
-        result_sig <= res;
-        carry_sig  <= c;
-        ovflow_sig <= ov;
+    
+    -- ALU operation (pure combinational logic)
+    A_unsigned     <= unsigned(A);
+    B_unsigned     <= unsigned(B);
+    C_unsigned     <= unsigned(C);
+    count_unsigned <= unsigned(count);
+    
+    process(operation, A_unsigned, B_unsigned, C_unsigned, count_unsigned)
+    begin
+    case operation is
+      when "00" =>  -- Pass current count
+        result_unsigned <= count_unsigned;
+    
+      when "01" =>  -- Find minimum reaction time
+          if (B_unsigned = 0) and (C_unsigned = 0) then
+             result_unsigned <= (A_unsigned);
+          elsif (C_unsigned = 0) then
+             if (A_unsigned <= B_unsigned) then
+              result_unsigned <= A_unsigned;
+            else
+              result_unsigned <= B_unsigned;
+            end if;
+          else
+            if (A_unsigned <= B_unsigned) and (A_unsigned <= C_unsigned) then
+              result_unsigned <= A_unsigned;
+            elsif (B_unsigned <= A_unsigned) and (B_unsigned <= C_unsigned) then
+              result_unsigned <= B_unsigned;
+            else
+              result_unsigned <= C_unsigned;
+            end if;
+          end if;    
+    
+      when "10" =>  -- Find maximum reaction time
+        if (A_unsigned >= B_unsigned) and (A_unsigned >= C_unsigned) then
+          result_unsigned <= A_unsigned;
+        elsif (B_unsigned >= A_unsigned) and (B_unsigned >= C_unsigned) then
+          result_unsigned <= B_unsigned;
+        else
+          result_unsigned <= C_unsigned;
+        end if;
+    
+      when "11" =>  -- Compute average reaction time
+        if (B_unsigned = 0) and (C_unsigned = 0) then -- A stored
+            result_unsigned <= (A_unsigned);
+        elsif (C_unsigned = 0) then -- A B stored
+            result_unsigned <= (A_unsigned + B_unsigned) / 2;
+        else
+            result_unsigned <= (A_unsigned + B_unsigned + C_unsigned) / 3;
+        end if;
+          
+        when others =>
+            result_unsigned <= (others => '0');
+    end case;
     end process;
-
-    result   <= result_sig;
-    zero     <= '1' when result_sig = X"00000000" else '0';
-    carry    <= carry_sig;
-    overflow <= ovflow_sig;
-    negative <= result_sig(31);
-
+    
+    -- Clocked process: Trigger BCD conversion when result changes
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if result_ready = '0' then
+                binary_buffer <= std_logic_vector(result_unsigned);
+                start_bcd     <= '1';    -- Start one-shot pulse
+                result_ready  <= '1';    -- Prevent re-triggering
+            else
+                start_bcd <= '0';
+            end if;
+    
+            if done_bcd = '1' then
+                result <= bcd_output;    -- Output ready result
+                result_ready <= '0';     -- Reset ready flag
+            end if;
+        end if;
+    end process;
+    
+    -- Instantiation of the 32-bit Binary to BCD converter
+    BINARY_TO_BCD_INIT: DoubleDabbler32Bit
+        port map (
+            clk   => clk,
+            reset => '0',      -- No reset used
+            start => start_bcd,
+            BIN   => binary_buffer,
+            BCD   => bcd_output,
+            done  => done_bcd
+        );
+    
 end Behavioral;

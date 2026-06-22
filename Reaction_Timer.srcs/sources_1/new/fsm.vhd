@@ -18,7 +18,9 @@
 -- displaying results, and calculating statistics.
 -- 
 -- Dependencies:
--- - PRNG.vhd (Pseudo-Random Delay Generator)
+-- - PRNG_1.vhd (Pseudo-Random Delay Generator)
+-- - PRNG_2.vhd
+-- - PRNG_3.vhd
 -- 
 -- Revision History:
 --  - Revision 0.01: Initial version created for milestone and full project functionality.
@@ -46,12 +48,25 @@ end finite_state_machine;
 
 architecture Behavioral of finite_state_machine is
 
-    component PRNG is
-        generic (SEED : STD_LOGIC_VECTOR(10 downto 0));
+    component PRNG_1 is
         Port (
-            clk        : in  STD_LOGIC;
-            enable     : in  STD_LOGIC;
-            random_val : out STD_LOGIC_VECTOR(10 downto 0));
+        clk         : in  STD_LOGIC;
+        enable      : in  STD_LOGIC;
+        random_val  : out STD_LOGIC_VECTOR(10 downto 0));                  
+    end component;
+
+    component PRNG_2 is
+        Port (
+        clk         : in  STD_LOGIC;
+        enable      : in  STD_LOGIC;
+        random_val  : out STD_LOGIC_VECTOR(10 downto 0));                  
+    end component;
+
+    component PRNG_3 is
+        Port (
+        clk         : in  STD_LOGIC;
+        enable      : in  STD_LOGIC;
+        random_val  : out STD_LOGIC_VECTOR(10 downto 0));                  
     end component;
 
     -- FSM state encoding
@@ -66,17 +81,26 @@ architecture Behavioral of finite_state_machine is
 
 begin
 
-    time_inst_1 : PRNG
-        generic map (SEED => "10101010101")
-        port map (clk => clk, enable => timer_set, random_val => time_1);
+    time_inst_1 : PRNG_1
+    Port map (
+        clk => clk,
+        enable => timer_set,
+        random_val => time_1
+    );
 
-    time_inst_2 : PRNG
-        generic map (SEED => "11001100110")
-        port map (clk => clk, enable => timer_set, random_val => time_2);
+    time_inst_2 : PRNG_2
+    Port map (
+        clk => clk,
+        enable => timer_set,
+        random_val => time_2
+    );
 
-    time_inst_3 : PRNG
-        generic map (SEED => "11100011100")
-        port map (clk => clk, enable => timer_set, random_val => time_3);
+    time_inst_3 : PRNG_3
+    Port map (
+        clk => clk,
+        enable => timer_set,
+        random_val => time_3
+    );
 
     -- State register: updates current state on rising clock edge
     STATE_REGISTER: process(clk)

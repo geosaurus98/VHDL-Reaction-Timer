@@ -98,7 +98,7 @@ architecture Structural of top_module is
     end component;
     
     component operation_leds is
-        Port ( led_display  : in STD_LOGIC_VECTOR(1 downto 0);
+        Port ( led_display  : STD_LOGIC_VECTOR(1 downto 0);
                led_pattern : out STD_LOGIC_VECTOR(15 downto 0));
     end component;
 
@@ -121,7 +121,7 @@ architecture Structural of top_module is
     -- Control signals for timer and storage
     signal counter_en    : STD_LOGIC;                         -- Enables the binary timer (starts counting)
     signal counter_rst   : STD_LOGIC;                         -- Resets the binary timer to zero
-    signal storage_rst   : STD_LOGIC;                         -- Resets stored reaction statistics in reaction_stats
+    signal storage_rst   : STD_LOGIC;                         -- Resets stored reaction statistics in ALU module
     
     -- Display configuration
     signal displays_on   : STD_LOGIC_VECTOR(3 downto 0);      -- Number of active digits to cycle through on the display
